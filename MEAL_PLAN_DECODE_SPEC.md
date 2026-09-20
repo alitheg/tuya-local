@@ -1,9 +1,16 @@
 # Design spec: smart decode for the pet-feeder meal plan
 
 **Status:** Draft / design proposal (working document — not the final PR content)
-**Device:** `custom_components/tuya_local/devices/welltobe_cat_feeder.yaml`
-(WellToBe WB S36D, product `qqzpxhisd6zs8zyq`) and other Tuya feeders that
-use the same `meal_plan` DP encoding.
+**Device:** `custom_components/tuya_local/devices/catit_pixi_smart_feeder.yaml`
+(Catit Pixi Smart Feeder, model 43752, product `s3rvixmeqx62vud5`) and other
+Tuya feeders that use the same `meal_plan` DP encoding — including
+`catit_pixi_6meal_feeder.yaml`, whose config already documents this exact
+byte layout, and `welltobe_cat_feeder.yaml`.
+
+> **Config-comment correction:** `catit_pixi_smart_feeder.yaml` currently
+> annotates DP 1 with *"Not thought to be used with Catit 43752"*. A real
+> 43752 (the requester's) returns a populated base64 meal plan on DP 1, so
+> that comment is wrong and should be removed/corrected in this work.
 **Goal (agreed):** decode the raw base64 meal-plan DP into a readable
 schedule, expose it as **both** an enriched sensor **and** an editable
 **calendar** entity, with full **round-trip** editing from Home Assistant,
@@ -18,18 +25,23 @@ DP `1` (`meal_plan`) is currently exposed as a *hidden* `text` entity:
 ```yaml
   - entity: text
     translation_key: meal_plan
-    hidden: true
     category: config
+    hidden: true
     dps:
+      # Not thought to be used with Catit 43752   <-- INCORRECT (see above)
       - id: 1
         type: base64
-        optional: true
         name: value
+        optional: true
 ```
 
 So Home Assistant receives the raw base64 string
 (`fwY6AQB/CAAEAH8NAAIAfw8eAQB/EA8CAH8RHgEAfxMeAgA=`) and does nothing with
 it. The user sees an opaque blob.
+
+Portions on this device range **1-12** (cf. DP 101 "Meal size" and DP 3
+`manual_feed`, both 1-12) — wider than the welltobe 1-6 — so the codec must
+not hardcode a portions range.
 
 ## 2. Decoded payload format
 
@@ -38,11 +50,20 @@ The base64 decodes to **35 bytes = 7 fixed-width records of 5 bytes** each
 firmly established). Each record is:
 
 ```
-byte 0: day-of-week bitmask   (bit0..bit6 = Sun,Mon,Tue,Wed,Thu,Fri,Sat; 0x7f = every day)
+byte 0: day-of-week bitmask   (MSB padded 0; bit6..bit0 = Mon,Tue,Wed,Thu,Fri,Sat,Sun; 0x7f = every day)
 byte 1: hour        (0-23)
 byte 2: minute      (0-59)
-byte 3: portions    (1-6, matches the manual_feed number range on this device)
+byte 3: portions / feed number (device-dependent range; 1-12 on the Smart Feeder)
 byte 4: enable flag (per-meal enable: 0 = enabled, 1 = disabled — polarity inferred, see §9)
+```
+
+The day-bitmask bit order is the one **documented in
+`catit_pixi_6meal_feeder.yaml`** ("1 bit per day Monday → Sunday, padded
+with 0 on the MSB. Ex: Monday, Wednesday, Sunday → 0b01010001"):
+
+```
+bit:   7    6    5    4    3    2    1    0
+day:  pad  Mon  Tue  Wed  Thu  Fri  Sat  Sun
 ```
 
 **Confirmed against a second sample.** Adding an 8th meal (13:13) grew the
@@ -50,10 +71,10 @@ payload from 35 → 40 bytes and the new record was inserted **time-sorted**
 between the 13:00 and 15:30 records — so the payload is a variable-length,
 chronologically-ordered array and `encode()` must sort by time. That new
 meal was set to "not Sunday", producing mask `0x7e` (bit 0 cleared), which
-**confirms bit 0 = Sunday** and the full bit order above. Toggling that
-meal's enable switch set **byte 4 to `1`** while every active meal stays
-`0`, identifying byte 4 as a **per-meal enable flag** (polarity inferred as
-0=enabled since the seven live feeds all read 0).
+matches **bit 0 = Sunday**. Toggling that meal's enable switch set **byte 4
+to `1`** while every active meal stays `0`, identifying byte 4 as a
+**per-meal enable flag** (polarity inferred as 0=enabled since the seven
+live feeds all read 0).
 
 Sample decoded:
 
@@ -68,7 +89,8 @@ Sample decoded:
 | 7 | 0x7f | 19   | 30  | 2        | 0    | daily 19:30, 2 portions|
 
 Confidence is now high on every field: record width, hour/minute/portions,
-the day-bitmask bit order (bit0=Sunday), and byte 4 being a per-meal enable.
+the day-bitmask bit order (from the 6-Meal config's documentation, cross-
+checked against the Sunday-off sample), and byte 4 being a per-meal enable.
 The only residual unknown is the enable **polarity**, inferred as 0=enabled.
 
 Reference decoder (validated against the sample above):
@@ -76,7 +98,8 @@ Reference decoder (validated against the sample above):
 ```python
 import base64
 
-DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]  # bit order TBC (§9)
+# bit index -> weekday, per catit_pixi_6meal_feeder.yaml (MSB padding at bit 7)
+BIT_DAY = {6: "Mon", 5: "Tue", 4: "Wed", 3: "Thu", 2: "Fri", 1: "Sat", 0: "Sun"}
 
 def decode_meal_plan(b64: str) -> list[dict]:
     raw = base64.b64decode(b64)
@@ -88,7 +111,7 @@ def decode_meal_plan(b64: str) -> list[dict]:
         meals.append(
             {
                 "days_mask": mask,
-                "days": [d for b, d in enumerate(DAYS) if mask & (1 << b)],
+                "days": [d for b, d in BIT_DAY.items() if mask & (1 << b)],
                 "hour": hour,
                 "minute": minute,
                 "portions": portions,
@@ -200,8 +223,11 @@ for a stable payload.
 
 ## 5. Config (YAML) changes
 
-`welltobe_cat_feeder.yaml` — replace the opaque `text` with a sensor (+ keep
-raw hidden text optionally), and add the calendar once phase C lands:
+`catit_pixi_smart_feeder.yaml` — fix the incorrect DP-1 comment, add a
+sensor (optionally keep the raw hidden text for power users), and add the
+calendar once phase C lands. The same additions apply to
+`catit_pixi_6meal_feeder.yaml` and `welltobe_cat_feeder.yaml` since they
+share the encoding:
 
 ```yaml
   - entity: sensor
@@ -223,7 +249,7 @@ raw hidden text optionally), and add the calendar once phase C lands:
         name: schedule
 ```
 
-Keep DP 1 `optional: true` (it was optional before; not all variants report it).
+Keep DP 1 `optional: true` (it already is; not all variants report it).
 
 ## 6. Schema / translations / icons
 
@@ -265,7 +291,7 @@ integration. Recommend:
 5. **PR (separate) — translations/icons** as AGENTS.md advises.
 
 Keep every piece **generic** (parameterised codec, translation keys, no
-`welltobe`-specific branching) so other feeders adopt it by config alone.
+device-specific branching) so other feeders adopt it by config alone.
 
 ## 9. Open questions — need a second data sample / confirmation
 
@@ -291,8 +317,10 @@ Still open (do not block phase A/B):
    active-meal count.
 5. **Attribute mechanism** — new generic DPS formatter vs. targeted
    `sensor.py` branch (prefer the reusable formatter if it stays simple).
-6. **DP 3 relationship.** `manual_feed` (DP 3, portions 1-6) confirms the
-   portions range; check it isn't also involved in scheduled feeds.
+6. **Related DPs on the Smart Feeder.** DP 3 `manual_feed` (1-12), DP 101
+   "Meal size" (1-12), DP 15 feed report, DP 104 "Last meal details"
+   (`R:.. C:.. T:..`). Confirm none of these overlap the scheduled-feed
+   path and use DP 101/3 to bound the portions byte range.
 
 ## 10. Risks
 
