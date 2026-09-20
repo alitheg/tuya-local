@@ -38,12 +38,22 @@ The base64 decodes to **35 bytes = 7 fixed-width records of 5 bytes** each
 firmly established). Each record is:
 
 ```
-byte 0: day-of-week bitmask   (0x7f in every record = all 7 days)
+byte 0: day-of-week bitmask   (bit0..bit6 = Sun,Mon,Tue,Wed,Thu,Fri,Sat; 0x7f = every day)
 byte 1: hour        (0-23)
 byte 2: minute      (0-59)
 byte 3: portions    (1-6, matches the manual_feed number range on this device)
-byte 4: flag byte   (0x00 in this sample — see open questions)
+byte 4: enable flag (per-meal enable: 0 = enabled, 1 = disabled — polarity inferred, see §9)
 ```
+
+**Confirmed against a second sample.** Adding an 8th meal (13:13) grew the
+payload from 35 → 40 bytes and the new record was inserted **time-sorted**
+between the 13:00 and 15:30 records — so the payload is a variable-length,
+chronologically-ordered array and `encode()` must sort by time. That new
+meal was set to "not Sunday", producing mask `0x7e` (bit 0 cleared), which
+**confirms bit 0 = Sunday** and the full bit order above. Toggling that
+meal's enable switch set **byte 4 to `1`** while every active meal stays
+`0`, identifying byte 4 as a **per-meal enable flag** (polarity inferred as
+0=enabled since the seven live feeds all read 0).
 
 Sample decoded:
 
@@ -57,10 +67,9 @@ Sample decoded:
 | 6 | 0x7f | 17   | 30  | 1        | 0    | daily 17:30, 1 portion |
 | 7 | 0x7f | 19   | 30  | 2        | 0    | daily 19:30, 2 portions|
 
-Confidence is high on the record width and on the hour/minute/portions
-fields (hours are monotonically increasing, minutes are all valid 0-59,
-portions are all within the device's advertised 1-6 range). The **day
-bitmask** and the **flag byte** need one confirming sample — see §9.
+Confidence is now high on every field: record width, hour/minute/portions,
+the day-bitmask bit order (bit0=Sunday), and byte 4 being a per-meal enable.
+The only residual unknown is the enable **polarity**, inferred as 0=enabled.
 
 Reference decoder (validated against the sample above):
 
@@ -83,17 +92,16 @@ def decode_meal_plan(b64: str) -> list[dict]:
                 "hour": hour,
                 "minute": minute,
                 "portions": portions,
-                "flag": flag,
+                "enabled": flag == 0,  # byte 4: 0 = enabled, 1 = disabled (inferred)
             }
         )
     return meals
 
 def encode_meal_plan(meals: list[dict]) -> str:
     out = bytearray()
-    for m in sorted(meals, key=lambda m: (m["hour"], m["minute"])):
-        out += bytes(
-            [m["days_mask"], m["hour"], m["minute"], m["portions"], m.get("flag", 0)]
-        )
+    for m in sorted(meals, key=lambda m: (m["hour"], m["minute"])):  # device keeps sorted
+        flag = 0 if m.get("enabled", True) else 1
+        out += bytes([m["days_mask"], m["hour"], m["minute"], m["portions"], flag])
     return base64.b64encode(bytes(out)).decode()
 ```
 
@@ -261,23 +269,29 @@ Keep every piece **generic** (parameterised codec, translation keys, no
 
 ## 9. Open questions — need a second data sample / confirmation
 
-These don't block phase A/B but must be nailed before shipping editing:
+Resolved by the second sample:
 
-1. **Day bitmask bit order.** Every record is `0x7f` (all days) in the
-   sample, so bit→weekday order is unproven. Confirm by setting **one meal
-   to specific weekdays** in the vendor app and re-reading DP 1. (Common
-   Tuya order is bit0 = Sunday, but verify.)
-2. **Flag byte (byte 4).** All `0x00` here. Candidates: per-slot
-   enable/disable, "already fed today", or reserved. Confirm by
-   disabling a single meal and re-reading.
-3. **Max slots / ordering.** Does the device cap the number of meals? Must
-   the array be time-sorted on write? (Codec sorts defensively.)
-4. **Portions in calendar events** — chosen representation (summary-parse
+- ~~Day bitmask bit order~~ — **CONFIRMED bit0=Sunday**, bits 0..6 =
+  Sun,Mon,Tue,Wed,Thu,Fri,Sat (deselecting Sunday gave mask `0x7e`).
+- ~~Flag byte meaning~~ — **CONFIRMED per-meal enable flag** (toggling a
+  meal's enable set byte 4 to 1).
+- ~~Array ordering~~ — **CONFIRMED time-sorted**; the inserted 13:13 record
+  landed between 13:00 and 15:30. `encode()` sorts by time.
+
+Still open (do not block phase A/B):
+
+1. **Enable polarity.** Inferred `0=enabled, 1=disabled` because the seven
+   live feeds all read 0. Confirm by re-enabling the 13:13 meal and checking
+   byte 4 returns to 0.
+2. **Max slots.** Does the device cap the number of meals? (Grew cleanly
+   7→8; upper bound unknown — validate ranges/count defensively on encode.)
+3. **Portions in calendar events** — chosen representation (summary-parse
    vs. paired number). See §4C.
-5. **Sensor state choice** — next-feed `timestamp` vs. active-meal count.
-6. **Attribute mechanism** — new generic DPS formatter vs. targeted
+4. **Sensor state choice** — next-feed `timestamp` (enabled meals only) vs.
+   active-meal count.
+5. **Attribute mechanism** — new generic DPS formatter vs. targeted
    `sensor.py` branch (prefer the reusable formatter if it stays simple).
-7. **DP 3 relationship.** `manual_feed` (DP 3, portions 1-6) confirms the
+6. **DP 3 relationship.** `manual_feed` (DP 3, portions 1-6) confirms the
    portions range; check it isn't also involved in scheduled feeds.
 
 ## 10. Risks
