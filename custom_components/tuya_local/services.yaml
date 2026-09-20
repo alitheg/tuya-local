@@ -20,3 +20,43 @@ send_learned_ir_command:
         entity:
           filter:
             domain: infrared
+
+save_meal_plan:
+  target:
+    entity:
+      domain: calendar
+      integration: tuya_local
+  fields:
+    name:
+      required: true
+      example: "Weekday"
+      selector:
+        text:
+    force:
+      example: true
+      selector:
+        boolean:
+
+load_meal_plan:
+  target:
+    entity:
+      domain: calendar
+      integration: tuya_local
+  fields:
+    name:
+      required: true
+      example: "Weekday"
+      selector:
+        text:
+
+delete_meal_plan:
+  target:
+    entity:
+      domain: calendar
+      integration: tuya_local
+  fields:
+    name:
+      required: true
+      example: "Weekday"
+      selector:
+        text:

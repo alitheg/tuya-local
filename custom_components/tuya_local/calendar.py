@@ -19,6 +19,7 @@ from homeassistant.components.calendar import (
     CalendarEvent,
 )
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .device import TuyaLocalDevice
@@ -38,6 +39,8 @@ DISABLED_SUFFIX = " (off)"
 # Feed size bounds (matches the device Meal size / manual_feed range).
 MIN_PORTIONS = 1
 MAX_PORTIONS = 12
+# Storage for named meal-plan presets saved in Home Assistant.
+PLAN_STORAGE_VERSION = 1
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -74,7 +77,29 @@ class TuyaLocalCalendar(TuyaLocalEntity, CalendarEntity):
             raise AttributeError(f"{config.config_id} is missing a schedule dps")
         # Optional dps giving the default feed size for new/edited meals.
         self._meal_size_dps = dps_map.pop("meal_size", None)
+        # Named meal-plan presets persisted in HA (name -> base64 payload).
+        self._plan_storage = Store(
+            device._hass,
+            PLAN_STORAGE_VERSION,
+            f"tuya_local_meal_plans_{device.unique_id}",
+        )
+        self._saved_plans: dict[str, str] = {}
+        self._storage_loaded = False
         self._init_end(dps_map)
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        await self._async_load_storage()
+
+    async def _async_load_storage(self):
+        """Load saved named plans from disk."""
+        self._saved_plans = await self._plan_storage.async_load() or {}
+        self._storage_loaded = True
+
+    @property
+    def extra_state_attributes(self):
+        attr = super().extra_state_attributes
+        return {**attr, "saved_plans": sorted(self._saved_plans)}
 
     def _plan(self) -> meal_plan.MealPlan:
         return meal_plan.decode_base64(self._schedule_dps.get_value(self._device))
@@ -221,3 +246,40 @@ class TuyaLocalCalendar(TuyaLocalEntity, CalendarEntity):
         )
         self._upsert(plan, slot, replace_uid=uid)
         await self._write(plan)
+
+    # --- Named presets -----------------------------------------------------
+
+    async def async_save_plan(self, name: str, force: bool = False) -> None:
+        """Snapshot the device's current schedule under a name."""
+        if not self._storage_loaded:
+            await self._async_load_storage()
+        if name in self._saved_plans and not force:
+            raise HomeAssistantError(
+                f"A meal plan named '{name}' already exists; pass force to overwrite"
+            )
+        payload = self._schedule_dps.get_value(self._device)
+        if not payload:
+            raise HomeAssistantError("No meal plan is currently available to save")
+        self._saved_plans[name] = payload
+        await self._plan_storage.async_save(self._saved_plans)
+        self.async_write_ha_state()
+
+    async def async_load_plan(self, name: str) -> None:
+        """Replace the device's schedule with a saved named plan."""
+        if not self._storage_loaded:
+            await self._async_load_storage()
+        payload = self._saved_plans.get(name)
+        if payload is None:
+            raise HomeAssistantError(f"No saved meal plan named '{name}'")
+        settings = self._schedule_dps.get_values_to_set(self._device, payload)
+        await self._device.async_set_properties(settings)
+
+    async def async_delete_plan(self, name: str) -> None:
+        """Delete a saved named plan."""
+        if not self._storage_loaded:
+            await self._async_load_storage()
+        if name not in self._saved_plans:
+            raise HomeAssistantError(f"No saved meal plan named '{name}'")
+        del self._saved_plans[name]
+        await self._plan_storage.async_save(self._saved_plans)
+        self.async_write_ha_state()

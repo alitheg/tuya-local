@@ -124,6 +124,40 @@
                     "description": "The IR device to send the command to. This is optional and only needed if the command was saved with a device."
                 }
             }
+        },
+        "save_meal_plan": {
+            "name": "Save meal plan",
+            "description": "Save the feeder's current schedule as a named plan.",
+            "fields": {
+                "name": {
+                    "name": "Name",
+                    "description": "The name to save the current schedule under."
+                },
+                "force": {
+                    "name": "Overwrite",
+                    "description": "Overwrite an existing saved plan with the same name."
+                }
+            }
+        },
+        "load_meal_plan": {
+            "name": "Load meal plan",
+            "description": "Replace the feeder's schedule with a saved named plan.",
+            "fields": {
+                "name": {
+                    "name": "Name",
+                    "description": "The name of the saved plan to load."
+                }
+            }
+        },
+        "delete_meal_plan": {
+            "name": "Delete meal plan",
+            "description": "Delete a saved named meal plan.",
+            "fields": {
+                "name": {
+                    "name": "Name",
+                    "description": "The name of the saved plan to delete."
+                }
+            }
         }
     },
     "entity": {

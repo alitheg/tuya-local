@@ -3,9 +3,21 @@
 **Status:** Phases 1–3 implemented — codec `helpers/meal_plan.py` +
 `mealplan` rawtype + enriched sensor + an **editable** `calendar` platform
 (create/update/delete round-trip; feed size via the event summary, default
-from DP 101; days via RRULE) on `catit_pixi_smart_feeder.yaml`, with tests.
-Optional follow-up: a `tuya_local.feeder_set_meal` service. Working
-document — not final PR content.
+from DP 101; days via RRULE) on `catit_pixi_smart_feeder.yaml`, plus
+**named-plan presets** (`tuya_local.save_meal_plan` / `load_meal_plan` /
+`delete_meal_plan`, persisted via HA `Store`), with tests. Optional
+follow-up: a `tuya_local.feeder_set_meal` service. Working document — not
+final PR content.
+
+### Named presets (save/load/load)
+
+The device stores only one active schedule (DP 1), so named plans live in HA,
+mirroring the `remote` entity's `Store` pattern
+(`tuya_local_meal_plans_<device_id>`, `{name: base64 payload}`). Three entity
+services on the calendar: **save** (snapshot current DP 1; needs `force` to
+overwrite an existing name), **load** (replace DP 1 with the saved payload),
+**delete**. Saved names surface as a `saved_plans` calendar attribute.
+Storing the raw base64 is lossless and works for any `mealplan` feeder.
 **Device:** `custom_components/tuya_local/devices/catit_pixi_smart_feeder.yaml`
 (Catit Pixi Smart Feeder, model 43752, product `s3rvixmeqx62vud5`) and other
 Tuya feeders that use the same `meal_plan` DP encoding — including

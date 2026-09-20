@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.components.calendar import CalendarEvent
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -190,3 +191,73 @@ def meal_plan_mask_mon_fri():
     from custom_components.tuya_local.helpers import meal_plan
 
     return meal_plan.mask_from_isoweekdays([1, 2, 3, 4, 5])
+
+
+# --- Named presets (save/load/delete) --------------------------------------
+
+
+def _storage_calendar(hass, payload=SAMPLE_MEALPLAN):
+    mock_device = Mock()
+    props = {"1": payload, "101": 3}
+    mock_device.get_property.side_effect = lambda i: props.get(str(i))
+    mock_device._hass = hass
+    mock_device.unique_id = "dummy-uid"
+    mock_device.async_set_properties = AsyncMock()
+    config = TuyaEntityConfig(
+        mock_device,
+        {
+            "entity": "calendar",
+            "dps": [
+                {"id": 1, "name": "schedule", "type": "mealplan"},
+                {
+                    "id": 101,
+                    "name": "meal_size",
+                    "type": "integer",
+                    "range": {"min": 1, "max": 12},
+                },
+            ],
+        },
+    )
+    cal = TuyaLocalCalendar(mock_device, config)
+    # async_write_ha_state needs a fully registered entity; stub it here.
+    cal.async_write_ha_state = Mock()
+    return cal, mock_device
+
+
+async def test_save_plan_lists_in_attributes(hass):
+    cal, _ = _storage_calendar(hass)
+    await cal.async_save_plan("Weekday")
+    assert cal.extra_state_attributes["saved_plans"] == ["Weekday"]
+
+
+async def test_save_existing_requires_force(hass):
+    cal, _ = _storage_calendar(hass)
+    await cal.async_save_plan("Weekday")
+    with pytest.raises(HomeAssistantError):
+        await cal.async_save_plan("Weekday")
+    # With force it succeeds.
+    await cal.async_save_plan("Weekday", force=True)
+
+
+async def test_load_plan_writes_saved_payload(hass):
+    cal, dev = _storage_calendar(hass)
+    await cal.async_save_plan("snapshot")
+    dev.async_set_properties.reset_mock()
+    await cal.async_load_plan("snapshot")
+    written = dev.async_set_properties.call_args.args[0]["1"]
+    assert written == SAMPLE_MEALPLAN
+
+
+async def test_load_missing_plan_raises(hass):
+    cal, _ = _storage_calendar(hass)
+    with pytest.raises(HomeAssistantError):
+        await cal.async_load_plan("does-not-exist")
+
+
+async def test_delete_plan(hass):
+    cal, _ = _storage_calendar(hass)
+    await cal.async_save_plan("temp")
+    await cal.async_delete_plan("temp")
+    assert cal.extra_state_attributes["saved_plans"] == []
+    with pytest.raises(HomeAssistantError):
+        await cal.async_delete_plan("temp")
