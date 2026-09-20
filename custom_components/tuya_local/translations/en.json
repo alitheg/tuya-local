@@ -215,6 +215,11 @@
                 }
             }
         },
+        "calendar": {
+            "meal_plan": {
+                "name": "Meal plan"
+            }
+        },
         "button": {
             "factory_reset": {
                 "name": "Factory reset"

@@ -1,8 +1,10 @@
 # Design spec: smart decode for the pet-feeder meal plan
 
-**Status:** Phase 1 implemented (codec `helpers/meal_plan.py` + `mealplan`
-rawtype + enriched sensor on `catit_pixi_smart_feeder.yaml` + tests).
-Phases 2–3 (calendar) still to build. Working document — not final PR content.
+**Status:** Phases 1–2 implemented — codec `helpers/meal_plan.py` +
+`mealplan` rawtype + enriched sensor + a read-only `calendar` platform on
+`catit_pixi_smart_feeder.yaml`, with tests. Phase 3 (editable calendar:
+create/update/delete round-trip) still to build. Working document — not
+final PR content.
 **Device:** `custom_components/tuya_local/devices/catit_pixi_smart_feeder.yaml`
 (Catit Pixi Smart Feeder, model 43752, product `s3rvixmeqx62vud5`) and other
 Tuya feeders that use the same `meal_plan` DP encoding — including

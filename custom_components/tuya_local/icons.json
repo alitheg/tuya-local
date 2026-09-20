@@ -45,6 +45,11 @@
                 "default": "mdi:salt"
             }
         },
+        "calendar": {
+            "meal_plan": {
+                "default": "mdi:calendar-clock"
+            }
+        },
         "button": {
             "factory_reset": {
                 "default": "mdi:cog-refresh"

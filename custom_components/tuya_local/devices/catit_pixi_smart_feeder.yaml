@@ -33,6 +33,15 @@ entities:
         type: mealplan
         name: sensor
         optional: true
+  - entity: calendar
+    translation_key: meal_plan
+    dps:
+      # Same schedule as a read-only calendar: each enabled meal becomes an
+      # event on the days it fires.
+      - id: 1
+        type: mealplan
+        name: schedule
+        optional: true
   - entity: text
     translation_key: meal_plan
     category: config

@@ -135,6 +135,7 @@ ENTITY_SCHEMA = vol.Schema(
                 "alarm_control_panel",
                 "binary_sensor",
                 "button",
+                "calendar",
                 "camera",
                 "climate",
                 "cover",
@@ -189,6 +190,7 @@ KNOWN_DPS = {
     },
     "binary_sensor": {"required": ["sensor"], "optional": []},
     "button": {"required": ["button"], "optional": []},
+    "calendar": {"required": ["schedule"], "optional": []},
     "camera": {
         "required": [],
         "optional": ["switch", "motion_enable", "snapshot", "record"],
