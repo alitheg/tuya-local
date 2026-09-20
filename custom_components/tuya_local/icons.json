@@ -792,6 +792,9 @@
             }
         },
         "sensor": {
+            "meal_plan": {
+                "default": "mdi:calendar-clock"
+            },
             "ambient_temperature": {
                 "default": "mdi:sun-thermometer"
             },

@@ -1161,6 +1161,9 @@
             }
         },
         "sensor": {
+            "meal_plan": {
+                "name": "Meal plan"
+            },
             "ambient_temperature": {
                 "name": "Ambient temperature"
             },

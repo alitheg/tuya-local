@@ -1,6 +1,8 @@
 # Design spec: smart decode for the pet-feeder meal plan
 
-**Status:** Draft / design proposal (working document — not the final PR content)
+**Status:** Phase 1 implemented (codec `helpers/meal_plan.py` + `mealplan`
+rawtype + enriched sensor on `catit_pixi_smart_feeder.yaml` + tests).
+Phases 2–3 (calendar) still to build. Working document — not final PR content.
 **Device:** `custom_components/tuya_local/devices/catit_pixi_smart_feeder.yaml`
 (Catit Pixi Smart Feeder, model 43752, product `s3rvixmeqx62vud5`) and other
 Tuya feeders that use the same `meal_plan` DP encoding — including
@@ -103,6 +105,7 @@ import base64
 # bit index -> weekday, per catit_pixi_6meal_feeder.yaml (MSB padding at bit 7)
 BIT_DAY = {6: "Mon", 5: "Tue", 4: "Wed", 3: "Thu", 2: "Fri", 1: "Sat", 0: "Sun"}
 
+
 def decode_meal_plan(b64: str) -> list[dict]:
     raw = base64.b64decode(b64)
     if len(raw) % 5 != 0:
@@ -122,9 +125,12 @@ def decode_meal_plan(b64: str) -> list[dict]:
         )
     return meals
 
+
 def encode_meal_plan(meals: list[dict]) -> str:
     out = bytearray()
-    for m in sorted(meals, key=lambda m: (m["hour"], m["minute"])):  # device keeps sorted
+    for m in sorted(
+        meals, key=lambda m: (m["hour"], m["minute"])
+    ):  # device keeps sorted
         flag = 1 if m.get("enabled", True) else 0
         out += bytes([m["days_mask"], m["hour"], m["minute"], m["portions"], flag])
     return base64.b64encode(bytes(out)).decode()

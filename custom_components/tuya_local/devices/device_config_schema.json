@@ -120,7 +120,7 @@
                                 },
                                 "type": {
                                     "type": "string",
-                                    "enum": ["boolean", "integer", "string", "bitfield", "base64", "hex", "utf16b64", "json", "unixtime", "float"],
+                                    "enum": ["boolean", "integer", "string", "bitfield", "base64", "mealplan", "hex", "utf16b64", "json", "unixtime", "float"],
                                     "description": "The type of the DP (e.g., boolean, integer, string)."
                                 },
                                 "name": {

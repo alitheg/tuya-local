@@ -92,6 +92,7 @@ DP_SCHEMA = vol.Schema(
                 "boolean",
                 "hex",
                 "base64",
+                "mealplan",
                 "bitfield",
                 "unixtime",
                 "json",

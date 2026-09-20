@@ -9,9 +9,11 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
 )
+from homeassistant.util import dt as dt_util
 
 from .device import TuyaLocalDevice
 from .entity import TuyaLocalEntity, unit_from_ascii
+from .helpers import meal_plan
 from .helpers.config import async_tuya_setup_platform
 from .helpers.device_config import TuyaEntityConfig
 
@@ -73,7 +75,21 @@ class TuyaLocalSensor(TuyaLocalEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the value reported by the sensor"""
+        if self._sensor_dps.rawtype == "mealplan":
+            # State is the next enabled feeding time; the full schedule is
+            # exposed through extra_state_attributes.
+            plan = meal_plan.decode_base64(self._sensor_dps.get_value(self._device))
+            return plan.next_feed(dt_util.now())
         return self._sensor_dps.get_value(self._device)
+
+    @property
+    def extra_state_attributes(self):
+        """Expose the decoded meal plan alongside the normal attributes."""
+        attr = super().extra_state_attributes
+        if self._sensor_dps.rawtype == "mealplan":
+            plan = meal_plan.decode_base64(self._sensor_dps.get_value(self._device))
+            attr = {**attr, **plan.as_attributes()}
+        return attr
 
     @property
     def native_unit_of_measurement(self):

@@ -21,12 +21,24 @@ entities:
         type: boolean
         name: button
         optional: true
+  - entity: sensor
+    translation_key: meal_plan
+    class: timestamp
+    dps:
+      # DP 1 holds the feeding schedule as a base64 array of 5-byte records
+      # (day bitmask, hour, minute, portions, enable flag). The mealplan type
+      # decodes it into the next feeding time (state) and the full schedule
+      # (attributes). See helpers/meal_plan.py.
+      - id: 1
+        type: mealplan
+        name: sensor
+        optional: true
   - entity: text
     translation_key: meal_plan
     category: config
     hidden: true
     dps:
-      # Not thought to be used with Catit 43752
+      # Raw base64 schedule, kept hidden for diagnostics/round-trip editing.
       - id: 1
         type: base64
         name: value
