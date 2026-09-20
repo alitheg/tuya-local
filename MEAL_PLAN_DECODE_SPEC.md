@@ -54,7 +54,7 @@ byte 0: day-of-week bitmask   (MSB padded 0; bit6..bit0 = Mon,Tue,Wed,Thu,Fri,Sa
 byte 1: hour        (0-23)
 byte 2: minute      (0-59)
 byte 3: portions / feed number (device-dependent range; 1-12 on the Smart Feeder)
-byte 4: enable flag (per-meal enable: 0 = enabled, 1 = disabled — polarity inferred, see §9)
+byte 4: enable flag (per-meal enable: 1 = enabled, 0 = disabled — confirmed by owner, see §2)
 ```
 
 The day-bitmask bit order is the one **documented in
@@ -71,10 +71,11 @@ payload from 35 → 40 bytes and the new record was inserted **time-sorted**
 between the 13:00 and 15:30 records — so the payload is a variable-length,
 chronologically-ordered array and `encode()` must sort by time. That new
 meal was set to "not Sunday", producing mask `0x7e` (bit 0 cleared), which
-matches **bit 0 = Sunday**. Toggling that meal's enable switch set **byte 4
-to `1`** while every active meal stays `0`, identifying byte 4 as a
-**per-meal enable flag** (polarity inferred as 0=enabled since the seven
-live feeds all read 0).
+matches **bit 0 = Sunday**. Byte 4 is a **per-meal enable flag**: the owner
+confirms the 13:13 record (byte 4 = `1`) is the **only enabled** meal while
+the other seven (byte 4 = `0`) are disabled, so **`1` = enabled, `0` =
+disabled**. (In the first sample all records were `0`, i.e. the whole
+schedule was disabled at that time.)
 
 Sample decoded:
 
@@ -90,8 +91,9 @@ Sample decoded:
 
 Confidence is now high on every field: record width, hour/minute/portions,
 the day-bitmask bit order (from the 6-Meal config's documentation, cross-
-checked against the Sunday-off sample), and byte 4 being a per-meal enable.
-The only residual unknown is the enable **polarity**, inferred as 0=enabled.
+checked against the Sunday-off sample), and byte 4 being a per-meal enable
+flag with **1 = enabled, 0 = disabled** (owner-confirmed). No residual
+unknowns in the field layout.
 
 Reference decoder (validated against the sample above):
 
@@ -115,7 +117,7 @@ def decode_meal_plan(b64: str) -> list[dict]:
                 "hour": hour,
                 "minute": minute,
                 "portions": portions,
-                "enabled": flag == 0,  # byte 4: 0 = enabled, 1 = disabled (inferred)
+                "enabled": flag == 1,  # byte 4: 1 = enabled, 0 = disabled
             }
         )
     return meals
@@ -123,7 +125,7 @@ def decode_meal_plan(b64: str) -> list[dict]:
 def encode_meal_plan(meals: list[dict]) -> str:
     out = bytearray()
     for m in sorted(meals, key=lambda m: (m["hour"], m["minute"])):  # device keeps sorted
-        flag = 0 if m.get("enabled", True) else 1
+        flag = 1 if m.get("enabled", True) else 0
         out += bytes([m["days_mask"], m["hour"], m["minute"], m["portions"], flag])
     return base64.b64encode(bytes(out)).decode()
 ```
@@ -299,17 +301,15 @@ Resolved by the second sample:
 
 - ~~Day bitmask bit order~~ — **CONFIRMED bit0=Sunday**, bits 0..6 =
   Sun,Mon,Tue,Wed,Thu,Fri,Sat (deselecting Sunday gave mask `0x7e`).
-- ~~Flag byte meaning~~ — **CONFIRMED per-meal enable flag** (toggling a
-  meal's enable set byte 4 to 1).
+- ~~Flag byte meaning + polarity~~ — **CONFIRMED per-meal enable flag,
+  `1` = enabled, `0` = disabled** (owner: the 13:13 record, byte 4 = 1, is
+  the only enabled meal).
 - ~~Array ordering~~ — **CONFIRMED time-sorted**; the inserted 13:13 record
   landed between 13:00 and 15:30. `encode()` sorts by time.
 
 Still open (do not block phase A/B):
 
-1. **Enable polarity.** Inferred `0=enabled, 1=disabled` because the seven
-   live feeds all read 0. Confirm by re-enabling the 13:13 meal and checking
-   byte 4 returns to 0.
-2. **Max slots.** Does the device cap the number of meals? (Grew cleanly
+1. **Max slots.** Does the device cap the number of meals? (Grew cleanly
    7→8; upper bound unknown — validate ranges/count defensively on encode.)
 3. **Portions in calendar events** — chosen representation (summary-parse
    vs. paired number). See §4C.
