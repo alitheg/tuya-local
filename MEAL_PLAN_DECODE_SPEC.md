@@ -279,21 +279,39 @@ Keep DP 1 `optional: true` (it already is; not all variants report it).
 
 ## 8. Upstream strategy & phasing
 
-A brand-new **calendar platform** is a precedent-setting change for this
-integration. Recommend:
+**Decision: we build the calendar entity (Phase 2), regardless of upstream
+appetite.** A calendar is the right HA home for an editable recurring
+schedule — its native recurring-event model and CREATE/UPDATE/DELETE
+features map directly onto add/edit/remove a meal slot, and every
+alternative (per-slot datetime/number/switch entities, or a services-only
+editor) is clunkier and less discoverable. Since a `calendar` platform is
+new to this integration, we still *offer* it upstream the collaborative way,
+but we do not gate the work on acceptance:
 
-1. **Talk to the maintainer first** (issue/discussion) before the calendar
-   PR — confirm they want a calendar platform and agree the generic codec
-   shape. The sensor phase is uncontroversial and can go first.
-2. **PR 1 — codec + enriched sensor** (`helpers/meal_plan.py`, sensor wiring,
-   YAML sensor swap, tests). Self-contained, immediately useful.
-3. **PR 2 — calendar platform** (`calendar.py`, schema enum, tests) — read
-   support first.
-4. **PR 3 — editable calendar** (CREATE/UPDATE/DELETE round-trip).
-5. **PR (separate) — translations/icons** as AGENTS.md advises.
+- **Courtesy heads-up, not a gate.** Open an issue/discussion proposing the
+  calendar platform so the maintainer can weigh in on shape early. Proceed
+  with implementation in parallel.
+- **Fallback if declined.** The calendar platform lives in this same
+  `custom_components/tuya_local` tree, so if upstream doesn't want it, the
+  requester runs the branch as their own `custom_components` override (or a
+  fork) with no further changes. Nothing about the design depends on being
+  merged.
 
-Keep every piece **generic** (parameterised codec, translation keys, no
-device-specific branching) so other feeders adopt it by config alone.
+Phasing:
+
+1. **PR 1 — codec + enriched sensor** (`helpers/meal_plan.py`, sensor wiring,
+   YAML sensor swap + the DP-1 comment fix, tests). Self-contained,
+   immediately useful, uncontroversial — lands first.
+2. **PR 2 — calendar platform, read** (`calendar.py`, schema enum, tests) —
+   event expansion + next-event, built regardless of the upstream reply.
+3. **PR 3 — editable calendar** (CREATE/UPDATE/DELETE round-trip).
+4. **PR (separate) — translations/icons** as AGENTS.md advises.
+
+If the maintainer prefers to take the sensor but not the calendar, PR 1
+still merges cleanly on its own and PRs 2–3 simply live on the personal
+branch/fork. Keep every piece **generic** (parameterised codec, translation
+keys, no device-specific branching) so other feeders adopt it by config
+alone and the personal-fork path stays a drop-in.
 
 ## 9. Open questions — need a second data sample / confirmation
 
