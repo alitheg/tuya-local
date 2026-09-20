@@ -92,6 +92,7 @@ DP_SCHEMA = vol.Schema(
                 "boolean",
                 "hex",
                 "base64",
+                "mealplan",
                 "bitfield",
                 "unixtime",
                 "json",
@@ -134,6 +135,7 @@ ENTITY_SCHEMA = vol.Schema(
                 "alarm_control_panel",
                 "binary_sensor",
                 "button",
+                "calendar",
                 "camera",
                 "climate",
                 "cover",
@@ -188,6 +190,7 @@ KNOWN_DPS = {
     },
     "binary_sensor": {"required": ["sensor"], "optional": []},
     "button": {"required": ["button"], "optional": []},
+    "calendar": {"required": ["schedule"], "optional": ["meal_size"]},
     "camera": {
         "required": [],
         "optional": ["switch", "motion_enable", "snapshot", "record"],

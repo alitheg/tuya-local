@@ -5,6 +5,7 @@ import logging
 
 import voluptuous as vol
 from homeassistant.components import infrared
+from homeassistant.components.calendar import DOMAIN as CALENDAR_DOMAIN
 from homeassistant.components.remote import (
     ATTR_DELAY_SECS,
     DEFAULT_DELAY_SECS,
@@ -14,6 +15,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 
+from .calendar import TuyaLocalCalendar
 from .const import DOMAIN
 from .infrared import TuyaRemoteCommand
 from .remote import FLAG_SAVE_DELAY, TuyaLocalRemote
@@ -22,6 +24,24 @@ REMOTE_SEND_IR_COMMAND_SCHEMA = {
     vol.Required("emitter_entity_id"): cv.entity_id,
     vol.Required("command"): str,
     vol.Optional("device"): str,
+}
+
+SAVE_MEAL_PLAN_SCHEMA = {
+    vol.Required("name"): str,
+    vol.Optional("force", default=False): bool,
+}
+
+MEAL_PLAN_NAME_SCHEMA = {
+    vol.Required("name"): str,
+}
+
+DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+SET_MEAL_SCHEMA = {
+    vol.Required("time"): cv.time,
+    vol.Optional("portions"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+    vol.Optional("days"): [vol.In(DAY_NAMES)],
+    vol.Optional("enabled", default=True): bool,
 }
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +58,74 @@ async def async_setup_services(hass: HomeAssistant, entities: list[str]):
             schema=REMOTE_SEND_IR_COMMAND_SCHEMA,
             func=async_handle_send_ir_command,
         )
+    if "calendar" in entities:
+        service.async_register_platform_entity_service(
+            hass,
+            DOMAIN,
+            "save_meal_plan",
+            entity_domain=CALENDAR_DOMAIN,
+            schema=SAVE_MEAL_PLAN_SCHEMA,
+            func=async_handle_save_meal_plan,
+        )
+        service.async_register_platform_entity_service(
+            hass,
+            DOMAIN,
+            "load_meal_plan",
+            entity_domain=CALENDAR_DOMAIN,
+            schema=MEAL_PLAN_NAME_SCHEMA,
+            func=async_handle_load_meal_plan,
+        )
+        service.async_register_platform_entity_service(
+            hass,
+            DOMAIN,
+            "delete_meal_plan",
+            entity_domain=CALENDAR_DOMAIN,
+            schema=MEAL_PLAN_NAME_SCHEMA,
+            func=async_handle_delete_meal_plan,
+        )
+        service.async_register_platform_entity_service(
+            hass,
+            DOMAIN,
+            "feeder_set_meal",
+            entity_domain=CALENDAR_DOMAIN,
+            schema=SET_MEAL_SCHEMA,
+            func=async_handle_feeder_set_meal,
+        )
     return True
+
+
+def _require_calendar(entity):
+    if not isinstance(entity, TuyaLocalCalendar):
+        raise ValueError("Entity must be a tuya-local meal plan calendar")
+
+
+async def async_handle_save_meal_plan(entity, call: ServiceCall):
+    """Save the current schedule under a name."""
+    _require_calendar(entity)
+    await entity.async_save_plan(call.data["name"], call.data.get("force", False))
+
+
+async def async_handle_load_meal_plan(entity, call: ServiceCall):
+    """Load a saved schedule onto the feeder."""
+    _require_calendar(entity)
+    await entity.async_load_plan(call.data["name"])
+
+
+async def async_handle_delete_meal_plan(entity, call: ServiceCall):
+    """Delete a saved schedule."""
+    _require_calendar(entity)
+    await entity.async_delete_plan(call.data["name"])
+
+
+async def async_handle_feeder_set_meal(entity, call: ServiceCall):
+    """Add or replace a single meal by explicit fields."""
+    _require_calendar(entity)
+    await entity.async_set_meal(
+        call.data["time"],
+        call.data.get("portions"),
+        call.data.get("days"),
+        call.data.get("enabled", True),
+    )
 
 
 async def async_handle_send_ir_command(entity, call: ServiceCall):
