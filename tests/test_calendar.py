@@ -52,9 +52,11 @@ async def test_init_entry(hass):
     m_add_entities.assert_called()
 
 
-def _calendar(payload):
+def _calendar(hass, payload):
     mock_device = Mock()
     mock_device.get_property.return_value = payload
+    mock_device._hass = hass
+    mock_device.unique_id = "dummy-uid"
     config = TuyaEntityConfig(
         mock_device,
         {
@@ -66,7 +68,7 @@ def _calendar(payload):
 
 
 async def test_get_events_expands_only_enabled_meals(hass):
-    cal = _calendar(SAMPLE_MEALPLAN)
+    cal = _calendar(hass, SAMPLE_MEALPLAN)
     tz = dt_util.DEFAULT_TIME_ZONE
     start = datetime(2026, 9, 21, 0, 0, tzinfo=tz)  # a Monday
     end = start + timedelta(days=7)
@@ -82,7 +84,7 @@ async def test_get_events_expands_only_enabled_meals(hass):
 
 
 async def test_get_events_empty_when_all_disabled(hass):
-    cal = _calendar(SAMPLE_MEALPLAN_DISABLED)
+    cal = _calendar(hass, SAMPLE_MEALPLAN_DISABLED)
     tz = dt_util.DEFAULT_TIME_ZONE
     start = datetime(2026, 9, 21, 0, 0, tzinfo=tz)
     end = start + timedelta(days=7)
@@ -90,24 +92,26 @@ async def test_get_events_empty_when_all_disabled(hass):
 
 
 def test_event_property_returns_upcoming(hass):
-    cal = _calendar(SAMPLE_MEALPLAN)
+    cal = _calendar(hass, SAMPLE_MEALPLAN)
     nxt = cal.event
     assert isinstance(nxt, CalendarEvent)
     assert nxt.start.hour == 13 and nxt.start.minute == 13
 
 
 def test_event_property_none_when_all_disabled(hass):
-    cal = _calendar(SAMPLE_MEALPLAN_DISABLED)
+    cal = _calendar(hass, SAMPLE_MEALPLAN_DISABLED)
     assert cal.event is None
 
 
 # --- Editing ---------------------------------------------------------------
 
 
-def _editable_calendar(payload, meal_size=3):
+def _editable_calendar(hass, payload, meal_size=3):
     mock_device = Mock()
     props = {"1": payload, "101": meal_size}
     mock_device.get_property.side_effect = lambda i: props.get(str(i))
+    mock_device._hass = hass
+    mock_device.unique_id = "dummy-uid"
     mock_device.async_set_properties = AsyncMock()
     config = TuyaEntityConfig(
         mock_device,
@@ -135,7 +139,7 @@ def _written_plan(mock_device):
 
 
 async def test_create_event_adds_meal(hass):
-    cal, dev = _editable_calendar(SAMPLE_MEALPLAN)
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN)
     tz = dt_util.DEFAULT_TIME_ZONE
     await cal.async_create_event(
         dtstart=datetime(2026, 9, 21, 7, 0, tzinfo=tz),
@@ -151,7 +155,7 @@ async def test_create_event_adds_meal(hass):
 
 
 async def test_create_event_defaults_portions_to_meal_size(hass):
-    cal, dev = _editable_calendar(SAMPLE_MEALPLAN, meal_size=4)
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN, meal_size=4)
     tz = dt_util.DEFAULT_TIME_ZONE
     await cal.async_create_event(
         dtstart=datetime(2026, 9, 21, 9, 0, tzinfo=tz),
@@ -162,7 +166,7 @@ async def test_create_event_defaults_portions_to_meal_size(hass):
 
 
 async def test_delete_event_removes_meal(hass):
-    cal, dev = _editable_calendar(SAMPLE_MEALPLAN)
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN)
     await cal.async_delete_event("1313")
     plan = _written_plan(dev)
     assert all(s.uid != "1313" for s in plan.slots)
@@ -170,7 +174,7 @@ async def test_delete_event_removes_meal(hass):
 
 
 async def test_update_event_changes_time_size_and_days(hass):
-    cal, dev = _editable_calendar(SAMPLE_MEALPLAN)
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN)
     tz = dt_util.DEFAULT_TIME_ZONE
     await cal.async_update_event(
         "0658",
