@@ -197,6 +197,42 @@ def meal_plan_mask_mon_fri():
     return meal_plan.mask_from_isoweekdays([1, 2, 3, 4, 5])
 
 
+# --- feeder_set_meal service ----------------------------------------------
+
+
+async def test_set_meal_adds_with_explicit_fields(hass):
+    from datetime import time as dtime
+
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN)
+    await cal.async_set_meal(
+        dtime(7, 30), portions=3, days=["mon", "tue", "wed", "thu", "fri"]
+    )
+    new = next(s for s in _written_plan(dev).slots if s.uid == "0730")
+    assert new.portions == 3
+    assert new.days_mask == meal_plan_mask_mon_fri()
+    assert new.enabled is True
+
+
+async def test_set_meal_defaults_to_meal_size_and_all_days(hass):
+    from datetime import time as dtime
+
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN, meal_size=4)
+    await cal.async_set_meal(dtime(10, 0))
+    new = next(s for s in _written_plan(dev).slots if s.uid == "1000")
+    assert new.portions == 4  # from device meal size
+    assert new.days_mask == 0x7F  # every day
+
+
+async def test_set_meal_replaces_existing_time(hass):
+    from datetime import time as dtime
+
+    cal, dev = _editable_calendar(hass, SAMPLE_MEALPLAN)
+    await cal.async_set_meal(dtime(13, 13), portions=6)
+    slots = [s for s in _written_plan(dev).slots if s.uid == "1313"]
+    assert len(slots) == 1
+    assert slots[0].portions == 6
+
+
 # --- Named presets (save/load/delete) --------------------------------------
 
 

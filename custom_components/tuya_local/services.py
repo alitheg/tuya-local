@@ -35,6 +35,15 @@ MEAL_PLAN_NAME_SCHEMA = {
     vol.Required("name"): str,
 }
 
+DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+SET_MEAL_SCHEMA = {
+    vol.Required("time"): cv.time,
+    vol.Optional("portions"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+    vol.Optional("days"): [vol.In(DAY_NAMES)],
+    vol.Optional("enabled", default=True): bool,
+}
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -74,6 +83,14 @@ async def async_setup_services(hass: HomeAssistant, entities: list[str]):
             schema=MEAL_PLAN_NAME_SCHEMA,
             func=async_handle_delete_meal_plan,
         )
+        service.async_register_platform_entity_service(
+            hass,
+            DOMAIN,
+            "feeder_set_meal",
+            entity_domain=CALENDAR_DOMAIN,
+            schema=SET_MEAL_SCHEMA,
+            func=async_handle_feeder_set_meal,
+        )
     return True
 
 
@@ -98,6 +115,17 @@ async def async_handle_delete_meal_plan(entity, call: ServiceCall):
     """Delete a saved schedule."""
     _require_calendar(entity)
     await entity.async_delete_plan(call.data["name"])
+
+
+async def async_handle_feeder_set_meal(entity, call: ServiceCall):
+    """Add or replace a single meal by explicit fields."""
+    _require_calendar(entity)
+    await entity.async_set_meal(
+        call.data["time"],
+        call.data.get("portions"),
+        call.data.get("days"),
+        call.data.get("enabled", True),
+    )
 
 
 async def async_handle_send_ir_command(entity, call: ServiceCall):

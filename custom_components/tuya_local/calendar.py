@@ -247,6 +247,25 @@ class TuyaLocalCalendar(TuyaLocalEntity, CalendarEntity):
         self._upsert(plan, slot, replace_uid=uid)
         await self._write(plan)
 
+    async def async_set_meal(
+        self,
+        meal_time: time,
+        portions: int | None = None,
+        days=None,
+        enabled: bool = True,
+    ) -> None:
+        """Add or replace a meal by explicit fields (service-driven)."""
+        if portions is None:
+            portions = self._default_portions()
+        portions = max(MIN_PORTIONS, min(MAX_PORTIONS, portions))
+        mask = meal_plan.mask_from_day_names(days) if days else meal_plan.ALL_DAYS
+        slot = meal_plan.MealSlot(
+            mask, meal_time.hour, meal_time.minute, portions, enabled
+        )
+        plan = self._plan()
+        self._upsert(plan, slot)
+        await self._write(plan)
+
     # --- Named presets -----------------------------------------------------
 
     async def async_save_plan(self, name: str, force: bool = False) -> None:

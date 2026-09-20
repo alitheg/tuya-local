@@ -60,3 +60,39 @@ delete_meal_plan:
       example: "Weekday"
       selector:
         text:
+
+feeder_set_meal:
+  target:
+    entity:
+      domain: calendar
+      integration: tuya_local
+  fields:
+    time:
+      required: true
+      example: "07:30"
+      selector:
+        time:
+    portions:
+      example: 2
+      selector:
+        number:
+          min: 1
+          max: 12
+          mode: box
+    days:
+      example: "[mon, tue, wed, thu, fri]"
+      selector:
+        select:
+          multiple: true
+          options:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+    enabled:
+      example: true
+      selector:
+        boolean:

@@ -147,6 +147,18 @@ def test_rrule_from_mask_roundtrips():
     assert meal_plan.mask_from_rrule(rrule) == 0x7E
 
 
+def test_mask_from_day_names():
+    assert meal_plan.mask_from_day_names(
+        ["mon", "tue", "wed", "thu", "fri"]
+    ) == meal_plan.mask_from_isoweekdays([1, 2, 3, 4, 5])
+    assert meal_plan.mask_from_day_names(["sun"]) == 0b00000001
+    assert meal_plan.mask_from_day_names([]) == 0
+    # Case-insensitive, unknown names ignored.
+    assert meal_plan.mask_from_day_names(
+        ["MON", "nope"]
+    ) == meal_plan.mask_from_isoweekdays([1])
+
+
 def test_slot_uid():
     assert meal_plan.MealSlot(meal_plan.ALL_DAYS, 6, 58, 1).uid == "0658"
     assert meal_plan.MealSlot(meal_plan.ALL_DAYS, 13, 13, 1).uid == "1313"

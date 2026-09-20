@@ -158,6 +158,28 @@
                     "description": "The name of the saved plan to delete."
                 }
             }
+        },
+        "feeder_set_meal": {
+            "name": "Set meal",
+            "description": "Add or replace a single scheduled meal by its fields.",
+            "fields": {
+                "time": {
+                    "name": "Time",
+                    "description": "The time of day the meal is dispensed."
+                },
+                "portions": {
+                    "name": "Portions",
+                    "description": "How many portions to dispense. Defaults to the device meal size."
+                },
+                "days": {
+                    "name": "Days",
+                    "description": "Days of the week the meal repeats on. Defaults to every day."
+                },
+                "enabled": {
+                    "name": "Enabled",
+                    "description": "Whether the meal is active."
+                }
+            }
         }
     },
     "entity": {

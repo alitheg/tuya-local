@@ -38,6 +38,7 @@ _PORTIONS_RE = re.compile(r"\d+")
 _BIT_ISO = {6: 1, 5: 2, 4: 3, 3: 4, 2: 5, 1: 6, 0: 7}
 _ISO_BIT = {iso: bit for bit, iso in _BIT_ISO.items()}
 _ISO_ABBR = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
+_ABBR_ISO = {abbr: iso for iso, abbr in _ISO_ABBR.items()}
 
 ALL_DAYS = 0x7F
 
@@ -187,6 +188,12 @@ def mask_from_isoweekdays(isoweekdays) -> int:
         if iso in _ISO_BIT:
             mask |= 1 << _ISO_BIT[iso]
     return mask
+
+
+def mask_from_day_names(names) -> int:
+    """Build a day bitmask from day abbreviations (mon..sun)."""
+    isodays = [_ABBR_ISO[n.lower()] for n in names if n.lower() in _ABBR_ISO]
+    return mask_from_isoweekdays(isodays)
 
 
 def parse_portions(summary: str | None) -> int | None:
