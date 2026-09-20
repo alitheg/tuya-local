@@ -98,3 +98,95 @@ def test_event_property_returns_upcoming(hass):
 def test_event_property_none_when_all_disabled(hass):
     cal = _calendar(SAMPLE_MEALPLAN_DISABLED)
     assert cal.event is None
+
+
+# --- Editing ---------------------------------------------------------------
+
+
+def _editable_calendar(payload, meal_size=3):
+    mock_device = Mock()
+    props = {"1": payload, "101": meal_size}
+    mock_device.get_property.side_effect = lambda i: props.get(str(i))
+    mock_device.async_set_properties = AsyncMock()
+    config = TuyaEntityConfig(
+        mock_device,
+        {
+            "entity": "calendar",
+            "dps": [
+                {"id": 1, "name": "schedule", "type": "mealplan"},
+                {
+                    "id": 101,
+                    "name": "meal_size",
+                    "type": "integer",
+                    "range": {"min": 1, "max": 12},
+                },
+            ],
+        },
+    )
+    return TuyaLocalCalendar(mock_device, config), mock_device
+
+
+def _written_plan(mock_device):
+    from custom_components.tuya_local.helpers import meal_plan
+
+    payload = mock_device.async_set_properties.call_args.args[0]["1"]
+    return meal_plan.decode_base64(payload)
+
+
+async def test_create_event_adds_meal(hass):
+    cal, dev = _editable_calendar(SAMPLE_MEALPLAN)
+    tz = dt_util.DEFAULT_TIME_ZONE
+    await cal.async_create_event(
+        dtstart=datetime(2026, 9, 21, 7, 0, tzinfo=tz),
+        dtend=datetime(2026, 9, 21, 7, 1, tzinfo=tz),
+        summary="Feed 2",
+    )
+    plan = _written_plan(dev)
+    assert len(plan.slots) == 9
+    new = next(s for s in plan.slots if s.uid == "0700")
+    assert new.portions == 2
+    assert new.enabled is True
+    assert new.days_mask == 0x7F  # no rrule -> every day
+
+
+async def test_create_event_defaults_portions_to_meal_size(hass):
+    cal, dev = _editable_calendar(SAMPLE_MEALPLAN, meal_size=4)
+    tz = dt_util.DEFAULT_TIME_ZONE
+    await cal.async_create_event(
+        dtstart=datetime(2026, 9, 21, 9, 0, tzinfo=tz),
+        summary="breakfast",  # no number -> use device meal size
+    )
+    new = next(s for s in _written_plan(dev).slots if s.uid == "0900")
+    assert new.portions == 4
+
+
+async def test_delete_event_removes_meal(hass):
+    cal, dev = _editable_calendar(SAMPLE_MEALPLAN)
+    await cal.async_delete_event("1313")
+    plan = _written_plan(dev)
+    assert all(s.uid != "1313" for s in plan.slots)
+    assert len(plan.slots) == 7
+
+
+async def test_update_event_changes_time_size_and_days(hass):
+    cal, dev = _editable_calendar(SAMPLE_MEALPLAN)
+    tz = dt_util.DEFAULT_TIME_ZONE
+    await cal.async_update_event(
+        "0658",
+        {
+            "dtstart": datetime(2026, 9, 21, 6, 30, tzinfo=tz),
+            "summary": "Feed 5",
+            "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+        },
+    )
+    plan = _written_plan(dev)
+    assert all(s.uid != "0658" for s in plan.slots)
+    moved = next(s for s in plan.slots if s.uid == "0630")
+    assert moved.portions == 5
+    assert moved.days_mask == meal_plan_mask_mon_fri()
+
+
+def meal_plan_mask_mon_fri():
+    from custom_components.tuya_local.helpers import meal_plan
+
+    return meal_plan.mask_from_isoweekdays([1, 2, 3, 4, 5])

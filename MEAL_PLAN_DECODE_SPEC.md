@@ -1,10 +1,11 @@
 # Design spec: smart decode for the pet-feeder meal plan
 
-**Status:** Phases 1–2 implemented — codec `helpers/meal_plan.py` +
-`mealplan` rawtype + enriched sensor + a read-only `calendar` platform on
-`catit_pixi_smart_feeder.yaml`, with tests. Phase 3 (editable calendar:
-create/update/delete round-trip) still to build. Working document — not
-final PR content.
+**Status:** Phases 1–3 implemented — codec `helpers/meal_plan.py` +
+`mealplan` rawtype + enriched sensor + an **editable** `calendar` platform
+(create/update/delete round-trip; feed size via the event summary, default
+from DP 101; days via RRULE) on `catit_pixi_smart_feeder.yaml`, with tests.
+Optional follow-up: a `tuya_local.feeder_set_meal` service. Working
+document — not final PR content.
 **Device:** `custom_components/tuya_local/devices/catit_pixi_smart_feeder.yaml`
 (Catit Pixi Smart Feeder, model 43752, product `s3rvixmeqx62vud5`) and other
 Tuya feeders that use the same `meal_plan` DP encoding — including
@@ -220,6 +221,36 @@ slot as a recurring calendar event and supports editing.
 Because the device stores the **entire plan in one DP**, every edit is a
 read-modify-write of the full array. The codec's `encode()` re-sorts by time
 for a stable payload.
+
+#### Phase 3 design (agreed) — handling feed size & enabled
+
+HA `CalendarEvent`s only expose summary, start/end, an RRULE and a
+description — there is **no custom field** — so the two non-temporal slot
+fields (feed size, enabled) need a home. Agreed approach is the **hybrid**:
+
+- **Feed size** rides in the event **summary** (`"Feed N"`); on create/update
+  the integer is parsed out of the title. When absent/unparseable the meal
+  defaults to the device's current **"Meal size" (DP 101)**, falling back to
+  `1` if that dp is unavailable. To read DP 101 the calendar entity gains an
+  optional `meal_size` dps (id 101). On read the summary is rendered
+  `"Feed N"` so the value round-trips.
+- **Days** come from the event's RRULE `BYDAY` (weekly). No RRULE ⇒ every
+  day (`0x7f`).
+- **Enabled**: CREATE ⇒ enabled; DELETE ⇒ remove the slot. Disabled meals
+  are preserved in the payload and rendered with a `" (off)"` summary suffix
+  so they stay visible; flipping enable is done by editing that suffix or via
+  the companion service below.
+- **Per-occurrence edits** (a `recurrence_id`-scoped change to one day) can't
+  be represented in the device format, so they apply to the whole slot/series
+  or are rejected — never silently dropped.
+- **Companion service** `tuya_local.feeder_set_meal` (time, days, portions,
+  enabled) gives a clean, scriptable, full-fidelity path that the calendar UI
+  can't offer; the existing hidden raw-`text` entity remains the escape
+  hatch. The service can land as a follow-up increment after calendar CRUD.
+
+Write path (verified): a non-masked `mealplan` dps sets straight through, so
+each edit is `decode → mutate MealPlan → encode_base64 →
+schedule_dps.get_values_to_set(device, b64) → device.async_set_properties`.
 
 ### Round-trip / write path notes
 

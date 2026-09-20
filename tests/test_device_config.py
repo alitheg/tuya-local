@@ -190,7 +190,7 @@ KNOWN_DPS = {
     },
     "binary_sensor": {"required": ["sensor"], "optional": []},
     "button": {"required": ["button"], "optional": []},
-    "calendar": {"required": ["schedule"], "optional": []},
+    "calendar": {"required": ["schedule"], "optional": ["meal_size"]},
     "camera": {
         "required": [],
         "optional": ["switch", "motion_enable", "snapshot", "record"],

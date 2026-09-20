@@ -17,6 +17,7 @@ catit_pixi_6meal_feeder.yaml and catit_pixi_smart_feeder.yaml.
 from __future__ import annotations
 
 import logging
+import re
 from base64 import b64decode, b64encode
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -24,6 +25,12 @@ from datetime import datetime, timedelta
 _LOGGER = logging.getLogger(__name__)
 
 RECORD_LEN = 5
+
+# RRULE BYDAY two-letter codes <-> ISO weekday (Mon=1 .. Sun=7).
+_BYDAY_ISO = {"MO": 1, "TU": 2, "WE": 3, "TH": 4, "FR": 5, "SA": 6, "SU": 7}
+_ISO_BYDAY = {iso: code for code, iso in _BYDAY_ISO.items()}
+
+_PORTIONS_RE = re.compile(r"\d+")
 
 # bit index within the day mask -> ISO weekday number (Mon=1 .. Sun=7), per
 # the order documented in catit_pixi_6meal_feeder.yaml
@@ -60,6 +67,11 @@ class MealSlot:
     @property
     def time_str(self) -> str:
         return f"{self.hour:02d}:{self.minute:02d}"
+
+    @property
+    def uid(self) -> str:
+        """Stable id for this slot; times are unique within a plan."""
+        return f"{self.hour:02d}{self.minute:02d}"
 
     def as_dict(self) -> dict:
         return {
@@ -175,3 +187,44 @@ def mask_from_isoweekdays(isoweekdays) -> int:
         if iso in _ISO_BIT:
             mask |= 1 << _ISO_BIT[iso]
     return mask
+
+
+def parse_portions(summary: str | None) -> int | None:
+    """Pull a feed size out of a calendar event summary (e.g. "Feed 3")."""
+    if not summary:
+        return None
+    match = _PORTIONS_RE.search(summary)
+    return int(match.group()) if match else None
+
+
+def mask_from_rrule(rrule: str | None) -> int:
+    """
+    Derive a day bitmask from an RRULE string's BYDAY part.
+
+    A missing rrule or a weekly rule with no BYDAY means every day.
+    """
+    if not rrule:
+        return ALL_DAYS
+    for part in rrule.split(";"):
+        key, _, value = part.partition("=")
+        if key.strip().upper() == "BYDAY" and value:
+            isodays = []
+            for code in value.split(","):
+                # Strip any leading ordinal (e.g. "2MO") - unusual here.
+                two = code.strip()[-2:].upper()
+                if two in _BYDAY_ISO:
+                    isodays.append(_BYDAY_ISO[two])
+            if isodays:
+                return mask_from_isoweekdays(isodays)
+    return ALL_DAYS
+
+
+def rrule_from_mask(mask: int) -> str | None:
+    """Return a weekly RRULE for the given day mask, or None if every day."""
+    if mask & ALL_DAYS == ALL_DAYS:
+        return None
+    isodays = sorted(iso for bit, iso in _BIT_ISO.items() if mask & (1 << bit))
+    if not isodays:
+        return None
+    byday = ",".join(_ISO_BYDAY[iso] for iso in isodays)
+    return f"FREQ=WEEKLY;BYDAY={byday}"

@@ -36,12 +36,21 @@ entities:
   - entity: calendar
     translation_key: meal_plan
     dps:
-      # Same schedule as a read-only calendar: each enabled meal becomes an
-      # event on the days it fires.
+      # Same schedule as a calendar: each enabled meal becomes an event on
+      # the days it fires. Supports create/update/delete, which re-encode the
+      # whole schedule and write it back to DP 1.
       - id: 1
         type: mealplan
         name: schedule
         optional: true
+      # Default feed size for meals created/edited without one specified.
+      - id: 101
+        type: integer
+        name: meal_size
+        optional: true
+        range:
+          min: 1
+          max: 12
   - entity: text
     translation_key: meal_plan
     category: config

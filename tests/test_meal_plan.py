@@ -122,6 +122,36 @@ def test_decode_truncates_partial_record():
     assert (plan.slots[0].hour, plan.slots[0].minute) == (6, 58)
 
 
+def test_parse_portions():
+    assert meal_plan.parse_portions("Feed 3") == 3
+    assert meal_plan.parse_portions("3") == 3
+    assert meal_plan.parse_portions("x2 portions") == 2
+    assert meal_plan.parse_portions("Breakfast") is None
+    assert meal_plan.parse_portions("") is None
+    assert meal_plan.parse_portions(None) is None
+
+
+def test_mask_from_rrule():
+    assert meal_plan.mask_from_rrule(None) == meal_plan.ALL_DAYS
+    assert meal_plan.mask_from_rrule("FREQ=WEEKLY") == meal_plan.ALL_DAYS
+    # Mon, Wed, Sun -> documented 0b01010001
+    assert meal_plan.mask_from_rrule("FREQ=WEEKLY;BYDAY=MO,WE,SU") == 0b01010001
+    # Mon-Sat (no Sunday) -> 0x7e
+    assert meal_plan.mask_from_rrule("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA") == 0x7E
+
+
+def test_rrule_from_mask_roundtrips():
+    assert meal_plan.rrule_from_mask(meal_plan.ALL_DAYS) is None
+    rrule = meal_plan.rrule_from_mask(0x7E)
+    assert rrule == "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA"
+    assert meal_plan.mask_from_rrule(rrule) == 0x7E
+
+
+def test_slot_uid():
+    assert meal_plan.MealSlot(meal_plan.ALL_DAYS, 6, 58, 1).uid == "0658"
+    assert meal_plan.MealSlot(meal_plan.ALL_DAYS, 13, 13, 1).uid == "1313"
+
+
 def test_as_attributes_shape():
     plan = meal_plan.decode_base64(SAMPLE_2)
     attrs = plan.as_attributes()
