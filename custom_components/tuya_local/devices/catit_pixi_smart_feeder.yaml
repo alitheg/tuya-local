@@ -29,10 +29,13 @@ entities:
       # (day bitmask, hour, minute, portions, enable flag). The mealplan type
       # decodes it into the next feeding time (state) and the full schedule
       # (attributes). See helpers/meal_plan.py.
+      # force: the device does not report the schedule in normal status polls,
+      # only when it changes, so request it explicitly on each full poll.
       - id: 1
         type: mealplan
         name: sensor
         optional: true
+        force: true
   - entity: calendar
     translation_key: meal_plan
     dps:
