@@ -416,6 +416,7 @@ class TuyaDpsConfig:
             "bitfield": int,
             "json": str,
             "base64": str,
+            "mealplan": str,
             "utf16b64": str,
             "hex": str,
             "unixtime": int,
@@ -531,7 +532,7 @@ class TuyaDpsConfig:
                 )
                 return None
 
-        elif self.rawtype == "base64" and isinstance(v, str):
+        elif self.rawtype in ("base64", "mealplan") and isinstance(v, str):
             try:
                 return b64decode(v)
             except ValueError:
@@ -548,7 +549,7 @@ class TuyaDpsConfig:
     def encode_value(self, v):
         if self.rawtype == "hex":
             return v.hex()
-        elif self.rawtype == "base64":
+        elif self.rawtype in ("base64", "mealplan"):
             return b64encode(v).decode("utf-8")
         elif self.rawtype == "unixtime" and isinstance(v, datetime):
             return v.timestamp()

@@ -131,3 +131,54 @@ def test_sensor_suggested_display_precision():
     )
     sensor = TuyaLocalSensor(mock_device, config)
     assert sensor.suggested_display_precision == 1
+
+
+# Reference payloads captured from a real Catit Pixi Smart Feeder (43752).
+# SAMPLE_MEALPLAN: 8 meals; the 13:13 slot (Mon-Sat) is the only enabled one.
+SAMPLE_MEALPLAN = "fwY6AQB/CAAEAH8NAAIAfg0NAQF/Dx4BAH8QDwIAfxEeAQB/Ex4CAA=="
+# SAMPLE_MEALPLAN_DISABLED: 7 meals, all every-day but all disabled.
+SAMPLE_MEALPLAN_DISABLED = "fwY6AQB/CAAEAH8NAAIAfw8eAQB/EA8CAH8RHgEAfxMeAgA="
+
+
+def _mealplan_sensor(payload):
+    mock_device = Mock()
+    mock_device.get_property.return_value = payload
+    config = TuyaEntityConfig(
+        mock_device,
+        {
+            "entity": "sensor",
+            "class": "timestamp",
+            "dps": [{"id": 1, "name": "sensor", "type": "mealplan"}],
+        },
+    )
+    return TuyaLocalSensor(mock_device, config)
+
+
+def test_mealplan_sensor_exposes_schedule_attributes():
+    sensor = _mealplan_sensor(SAMPLE_MEALPLAN)
+    attr = sensor.extra_state_attributes
+    assert attr["meal_count"] == 8
+    assert attr["enabled_count"] == 1
+    assert attr["meals"][3] == {
+        "time": "13:13",
+        "portions": 1,
+        "days": ["mon", "tue", "wed", "thu", "fri", "sat"],
+        "enabled": True,
+    }
+
+
+def test_mealplan_sensor_next_feed_is_future_datetime():
+    from datetime import datetime
+
+    sensor = _mealplan_sensor(SAMPLE_MEALPLAN)
+    value = sensor.native_value
+    assert isinstance(value, datetime)
+    assert value.tzinfo is not None
+
+
+def test_mealplan_sensor_next_feed_none_when_all_disabled():
+    sensor = _mealplan_sensor(SAMPLE_MEALPLAN_DISABLED)
+    assert sensor.native_value is None
+    # Attributes still list the (disabled) meals.
+    assert sensor.extra_state_attributes["meal_count"] == 7
+    assert sensor.extra_state_attributes["enabled_count"] == 0
